@@ -1,0 +1,85 @@
+// IrradianceMapGenerator.compute
+#pragma kernel CSMain
+
+#include "UnityCG.cginc"
+
+
+//RWTexture2D<float4> Result;
+RWTexture2DArray<float4> Result;
+TextureCube<float4> SkyboxTexture;
+float4x4 SkyboxRotation;
+uint _Resolution;
+
+SamplerState samplerstate_linear_clamp : register(s0);
+
+float3 SphericalToCartesian(float phi, float theta) 
+{
+    float sinTheta = sin(theta);
+    float cosTheta = cos(theta);
+    float sinPhi = sin(phi);
+    float cosPhi = cos(phi);
+    return float3(sinTheta * cosPhi, cosTheta, sinTheta * sinPhi);
+}
+
+float3 OctahedralNormalVector(uint faceIndex, uint2 coord, uint2 resolution) 
+{
+    // Implementation of octahedral normal vector mapping goes here
+    // ...
+    return float3(0, 1, 0); // Placeholder
+}
+
+float4 SampleSkybox(TextureCube<float4> skybox, float3 dir) 
+{
+    //return skybox.SampleLevel(unity_SamplerCube(skybox), dir, 0);
+    return skybox.SampleLevel(samplerstate_linear_clamp, dir, 0);
+}
+
+
+
+//[numthreads(8, 8, 6)]
+//void CSMain(uint3 id : SV_DispatchThreadID) 
+//{
+//    uint faceIndex = id.z;
+//    uint2 resolution = uint2(_Resolution, _Resolution);
+//    float3 dir = OctahedralNormalVector(faceIndex, id.xy, resolution);
+//    float3 irradiance = float3(0, 0, 0);
+//    float deltaPhi = (2.0 * UNITY_PI) / 64.0;
+//    float deltaTheta = 0.5 * UNITY_PI / 32.0;
+//
+//    for (float phi = 0.0; phi < 2.0 * UNITY_PI; phi += deltaPhi) 
+//    {
+//        for (float theta = 0.0; theta < 0.5 * UNITY_PI; theta += deltaTheta) 
+//        {
+//            float3 sampleDir = SphericalToCartesian(phi, theta);
+//            sampleDir = mul(SkyboxRotation, sampleDir);
+//            irradiance += SampleSkybox(SkyboxTexture, sampleDir).rgb * cos(theta) * sin(theta);
+//        }
+//    }
+//
+//    irradiance *= deltaPhi * deltaTheta * UNITY_PI;
+//    Result[id.xy] = float4(irradiance, 1);
+//}
+
+[numthreads(8, 8, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    uint2 resolution = uint2(_Resolution, _Resolution);
+    float3 dir = OctahedralNormalVector(id.z, id.xy, resolution);
+    float3 irradiance = float3(0, 0, 0);
+    float deltaPhi = (2.0 * UNITY_PI) / 64.0;
+    float deltaTheta = 0.5 * UNITY_PI / 32.0;
+
+    for (float phi = 0.0; phi < 2.0 * UNITY_PI; phi += deltaPhi)
+    {
+        for (float theta = 0.0; theta < 0.5 * UNITY_PI; theta += deltaTheta)
+        {
+            float3 sampleDir = SphericalToCartesian(phi, theta);
+            sampleDir = mul(SkyboxRotation, sampleDir);
+            irradiance += SampleSkybox(SkyboxTexture, sampleDir).rgb * cos(theta) * sin(theta);
+        }
+    }
+
+    irradiance *= deltaPhi * deltaTheta * UNITY_PI;
+    uint3 index = uint3(id.xy, id.z);
+    Result[index] = float4(irradiance, 1);
+}
